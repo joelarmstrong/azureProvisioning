@@ -16,7 +16,8 @@ SSHKit::Backend::Netssh.configure do |ssh|
   }
 end
 
-def provision(region, image_name, name, cloud_service, user='toilprovisioning')
+def provision(region, image_name, name, cloud_service, user='toilprovisioning',
+              block_until_ready=true)
   vm = $vmm.create_virtual_machine({:vm_name => name,
                                     :vm_user => user,
                                     :image => image_name,
@@ -27,6 +28,12 @@ def provision(region, image_name, name, cloud_service, user='toilprovisioning')
                                     :private_key_file => '/home/joel/azureSSH.key',
                                     :ssh_port => 22,
                                     :vm_size => 'Small'})
+  if block_until_ready
+    while $vmm.get_virtual_machine(name, 'toilprovisioning').status != "ReadyRole"
+      puts "waiting to come up..."
+      sleep 30
+    end
+  end
   return "#{user}@#{vm.ipaddress}"
 end
 
@@ -68,10 +75,6 @@ def from(image_name, &block)
   cloud_service = 'toilprovisioning'
   name = SecureRandom.hex
   server = provision("West US", image_name, name, cloud_service, 'provisioner')
-  while $vmm.get_virtual_machine(name, 'toilprovisioning').status != "ReadyRole"
-    puts "waiting to come up..."
-    sleep 30
-  end
   begin
     on(server, &block)
     on(server) do
