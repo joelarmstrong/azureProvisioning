@@ -1,4 +1,4 @@
-# Building a VDH image using Azure.
+# Building a VHD image using Azure.
 require 'azure'
 require 'sshkit'
 require 'sshkit/dsl'
@@ -38,7 +38,7 @@ def delete(server, cloud_service)
   $vmm.delete_virtual_machine(server, cloud_service)
 end
 
-def capture_image(name, cloud_service, target_name)
+def capture_image(name, cloud_service, target_name, block_until_ready=true)
   endpoint = RestClient::Resource.new(
     "https://management.core.windows.net/#{Azure.subscription_id}/services/hostedservices/#{cloud_service}/deployments/#{name}/roleinstances/#{name}/Operations",
     :ssl_client_cert => OpenSSL::X509::Certificate.new(File.read("/home/joel/azureJcarmstr.pem")),
@@ -52,8 +52,16 @@ def capture_image(name, cloud_service, target_name)
   <TargetImageName>#{target_name}</TargetImageName>
 </CaptureRoleOperation>
 END
-  puts endpoint.post(payload, {"content-type" => "application/xml",
-                               "x-ms-version" => "2015-04-01"}).to_s
+  endpoint.post(payload, {"content-type" => "application/xml",
+                          "x-ms-version" => "2015-04-01"})
+  if block_until_ready
+    while Azure.vm_image_management.list_os_images
+           .select { |i| i.name == target_name }
+           .length == 0
+      puts 'waiting for image to be ready...'
+      sleep 30
+    end
+  end
 end
 
 def from(image_name, &block)
@@ -74,7 +82,7 @@ def from(image_name, &block)
     stop(name, cloud_service)
     capture_image(name, cloud_service, name)
   rescue
-    delete(name, cloud_service).inspect
+    delete(name, cloud_service)
   end
   return name
 end
