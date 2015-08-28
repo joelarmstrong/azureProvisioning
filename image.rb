@@ -83,7 +83,20 @@ def from(image_name, &block)
       end
     end
     stop(name, cloud_service)
+    # Capturing the image destroys the virtual machine but doesn't
+    # delete the disk. Save the disk name so we can delete it later
+    disk_name = $vmm.get_virtual_machine(name, 'toilprovisioning').disk_name
     capture_image(name, cloud_service, name)
+    begin
+      Azure.vm_disk_management.delete_virtual_machine_disk(disk_name)
+    rescue => e
+      # The disk can sometimes still be claimed by the capture
+      # operation even when the new OS image has been made available.
+      if e.message =~ /ConflictError/
+        sleep 30
+        retry
+      end
+    end
   rescue
     delete(name, cloud_service)
   end
