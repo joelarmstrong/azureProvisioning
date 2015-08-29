@@ -88,7 +88,10 @@ def from(image_name, &block)
     disk_name = $vmm.get_virtual_machine(name, 'toilprovisioning').disk_name
     capture_image(name, cloud_service, name)
     begin
-      Azure.vm_disk_management.delete_virtual_machine_disk(disk_name)
+      # This ghetto addition of a query parameter is to make the
+      # deletion of the disk delete the underlying VHD. This is not
+      # otherwise possible in the Ruby API.
+      Azure.vm_disk_management.delete_virtual_machine_disk(disk_name + '?comp=media')
     rescue => e
       # The disk can sometimes still be claimed by the capture
       # operation even when the new OS image has been made available.
@@ -97,8 +100,9 @@ def from(image_name, &block)
         retry
       end
     end
-  rescue
+  rescue => e
     delete(name, cloud_service)
+    raise e
   end
   return name
 end
